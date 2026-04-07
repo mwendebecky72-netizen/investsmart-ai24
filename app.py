@@ -81,11 +81,9 @@ class InvestSmartEngine:
         self.model = self.init_model(self.model_index)
 
     def get_compatible_models(self):
-        """Return a list of all models supporting generateContent."""
         try:
             models = genai.list_models()
-            # Corrected attribute access for the genai library objects
-            compatible = [m.name for m in models if "generateContent" in m.supported_generation_methods]
+            compatible = [m["name"] for m in models if "generateContent" in m.get("capabilities", [])]
             if not compatible:
                 st.sidebar.error("No compatible models found that support generateContent.")
             else:
@@ -96,10 +94,100 @@ class InvestSmartEngine:
             return []
 
     def init_model(self, index):
-        """Initialize the model by index."""
         if self.available_models and 0 <= index < len(self.available_models):
-            selected_model_name = self.available_models[index]
-            st.sidebar.info(f"✅ Using model: {selected_model_name}")
-            return genai.GenerativeModel(model_name=selected_model_name)
+            st.sidebar.info(f"✅ Using model: {self.available_models[index]}")
+            return genai.GenerativeModel(model_name=self.available_models[index])
         return None
 
+    def retrieve_context(self, query):
+        for chunk in self.pdf_chunks:
+            if any(word.lower() in chunk.lower() for word in query.split()):
+                return chunk
+        return self.pdf_chunks[0] if self.pdf_chunks else "No context available."
+
+    def generate_response(self, user_query):
+        if not self.available_models:
+            return "❌ No valid models available. Check API key and model compatibility."
+        
+        for attempt in range(len(self.available_models)):
+            try:
+                if not self.model:
+                    return "❌ No valid model initialized."
+                context = self.retrieve_context(user_query)
+                prompt = f"You are Aris, an AI policy assistant. Answer ONLY using this context: {context}\n\nQuestion: {user_query}"
+                response = self.model.generate_content(prompt)
+                CostMonitor.estimate_cost(len(prompt))
+                SecurityLayer.log_interaction(user_query, "user")
+                return response.text
+            except Exception as e:
+                st.sidebar.warning(f"Model {self.available_models[self.model_index]} failed: {e}")
+                self.model_index += 1
+                if self.model_index < len(self.available_models):
+                    self.model = self.init_model(self.model_index)
+                else:
+                    self.model = None
+
+        return "❌ All models failed. Please check your API key or try again later."
+
+# MAIN APP
+def main():
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+    if "total_cost" not in st.session_state:
+        st.session_state.total_cost = 0.0
+
+    st.sidebar.title("Admin")
+    
+    api_key = None
+    if "GOOGLE_API_KEY" in st.secrets:
+        api_key = st.secrets["GOOGLE_API_KEY"]
+        st.sidebar.success("✅ API Key active from Secrets")
+    else:
+        api_key = st.sidebar.text_input("Enter Gemini API Key", type="password")
+        if not api_key:
+            st.warning("Please add your API Key to Streamlit Secrets or enter it here.")
+
+    # PDF PRELOAD AND CHUNKING
+    uploaded_file = st.sidebar.file_uploader("Upload PDF", type="pdf")
+
+    if uploaded_file:
+        if "pdf_chunks" not in st.session_state or st.session_state.uploaded_file_name != uploaded_file.name:
+            text = extract_text_from_pdf(uploaded_file)
+            chunks = chunk_text(text)
+            st.session_state.pdf_chunks = chunks
+            st.session_state.uploaded_file_name = uploaded_file.name
+        else:
+            chunks = st.session_state.pdf_chunks
+    else:
+        if "pdf_chunks" not in st.session_state:
+            text = "Sample policy: Uber not covered. Grace period 30 days."
+            chunks = chunk_text(text)
+            st.session_state.pdf_chunks = chunks
+        else:
+            chunks = st.session_state.pdf_chunks
+
+    if api_key:
+        engine = InvestSmartEngine(api_key, chunks)
+
+        for msg in st.session_state.messages:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+
+        if prompt := st.chat_input("Ask Aris..."):
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            with st.chat_message("user"):
+                st.markdown(prompt)
+
+            with st.chat_message("assistant"):
+                reply = engine.generate_response(prompt)
+                st.markdown(reply)
+            st.session_state.messages.append({"role": "assistant", "content": reply})
+
+    st.sidebar.metric("Cost", f"${st.session_state.total_cost:.6f}")
+
+    if "audit_log" in st.session_state:
+        with st.sidebar.expander("Audit Log"):
+            st.write(st.session_state.audit_log)
+
+if __name__ == "__main__":
+    main()
