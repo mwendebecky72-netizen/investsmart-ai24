@@ -83,15 +83,20 @@ class InvestSmartEngine:
     def get_compatible_models(self):
         try:
             models = genai.list_models()
-            compatible = [m["name"] for m in models if "generateContent" in m.get("capabilities", [])]
+            # UPGRADE: Using attribute access (m.name) instead of dictionary access (m["name"])
+            # and checking supported_generation_methods for compatibility.
+            compatible = [m.name for m in models if "generateContent" in m.supported_generation_methods]
+            
             if not compatible:
                 st.sidebar.error("No compatible models found that support generateContent.")
+                # Safety fallback to ensure the engine doesn't break
+                return ["models/gemini-1.5-flash"]
             else:
                 st.sidebar.info(f"Found {len(compatible)} compatible model(s).")
             return compatible
         except Exception as e:
             st.sidebar.error(f"Error fetching models: {e}")
-            return []
+            return ["models/gemini-1.5-flash"]
 
     def init_model(self, index):
         if self.available_models and 0 <= index < len(self.available_models):
@@ -109,16 +114,29 @@ class InvestSmartEngine:
         if not self.available_models:
             return "❌ No valid models available. Check API key and model compatibility."
         
+        # Iterates through available models if one fails
         for attempt in range(len(self.available_models)):
             try:
                 if not self.model:
+                    self.model = self.init_model(self.model_index)
+                
+                if not self.model:
                     return "❌ No valid model initialized."
+                
                 context = self.retrieve_context(user_query)
                 prompt = f"You are Aris, an AI policy assistant. Answer ONLY using this context: {context}\n\nQuestion: {user_query}"
                 response = self.model.generate_content(prompt)
+                
+                # Logic to handle potential empty responses
+                if hasattr(response, 'text'):
+                    reply_text = response.text
+                else:
+                    reply_text = "The model returned an empty response. Please rephrase."
+
                 CostMonitor.estimate_cost(len(prompt))
                 SecurityLayer.log_interaction(user_query, "user")
-                return response.text
+                return reply_text
+
             except Exception as e:
                 st.sidebar.warning(f"Model {self.available_models[self.model_index]} failed: {e}")
                 self.model_index += 1
@@ -135,6 +153,8 @@ def main():
         st.session_state.messages = []
     if "total_cost" not in st.session_state:
         st.session_state.total_cost = 0.0
+    if "uploaded_file_name" not in st.session_state:
+        st.session_state.uploaded_file_name = None
 
     st.sidebar.title("Admin")
     
@@ -167,6 +187,7 @@ def main():
             chunks = st.session_state.pdf_chunks
 
     if api_key:
+        # Initializing the engine inside the logic flow
         engine = InvestSmartEngine(api_key, chunks)
 
         for msg in st.session_state.messages:
@@ -191,3 +212,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
