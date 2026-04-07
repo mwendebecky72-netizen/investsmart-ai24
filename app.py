@@ -76,8 +76,8 @@ class InvestSmartEngine:
     def __init__(self, api_key, pdf_chunks):
         genai.configure(api_key=api_key)
         self.pdf_chunks = pdf_chunks
-        # STABLE MODEL PATH UPDATED BELOW
-        self.model = genai.GenerativeModel(model_name='models/gemini-1.5-flash')
+        # UPDATED TO 2026 STABLE MODEL: gemini-3.1-flash-lite
+        self.model = genai.GenerativeModel(model_name='gemini-3.1-flash-lite')
 
     def retrieve_context(self, query):
         for chunk in self.pdf_chunks:
