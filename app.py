@@ -78,13 +78,14 @@ class InvestSmartEngine:
         self.pdf_chunks = pdf_chunks
         self.available_models = self.get_compatible_models()
         self.model_index = 0
+        # Initialize the model using the helper method
         self.model = self.init_model(self.model_index)
 
     def get_compatible_models(self):
         """Return a list of all models supporting generateContent."""
         try:
             models = genai.list_models()
-            compatible = [m["name"] for m in models if "generateContent" in m.get("capabilities", [])]
+            compatible = [m.name for m in models if "generateContent" in m.supported_generation_methods]
             if not compatible:
                 st.sidebar.error("No compatible models found that support generateContent.")
             else:
@@ -97,6 +98,16 @@ class InvestSmartEngine:
     def init_model(self, index):
         """Initialize the model by index."""
         if self.available_models and 0 <= index < len(self.available_models):
-            st.sidebar.info(f"✅ Using model: {self.available_models[index]}")
-            return genai.GenerativeModel(model_name=self
+            selected_model_name = self.available_models[index]
+            st.sidebar.info(f"✅ Using model: {selected_model_name}")
+            return genai.GenerativeModel(model_name=selected_model_name)
+        return None
+
+# Placeholder for main execution logic
+def main():
+    st.title("InvestSmart AI (Enterprise Edition)")
+    # Logic for API Key and PDF upload would follow here...
+
+if __name__ == "__main__":
+    main()
 
