@@ -76,7 +76,8 @@ class InvestSmartEngine:
     def __init__(self, api_key, pdf_chunks):
         genai.configure(api_key=api_key)
         self.pdf_chunks = pdf_chunks
-        self.model = genai.GenerativeModel(model_name='gemini-1.5-flash')
+        # UPDATED MODEL NAME BELOW
+        self.model = genai.GenerativeModel(model_name='gemini-1.5-flash-latest')
 
     def retrieve_context(self, query):
         for chunk in self.pdf_chunks:
@@ -85,12 +86,15 @@ class InvestSmartEngine:
         return self.pdf_chunks[0] if self.pdf_chunks else "No context available."
 
     def generate_response(self, user_query):
-        context = self.retrieve_context(user_query)
-        prompt = f"You are Aris, an AI policy assistant. Answer ONLY using this context: {context}\n\nQuestion: {user_query}"
-        response = self.model.generate_content(prompt)
-        CostMonitor.estimate_cost(len(prompt))
-        SecurityLayer.log_interaction(user_query, "user")
-        return response.text
+        try:
+            context = self.retrieve_context(user_query)
+            prompt = f"You are Aris, an AI policy assistant. Answer ONLY using this context: {context}\n\nQuestion: {user_query}"
+            response = self.model.generate_content(prompt)
+            CostMonitor.estimate_cost(len(prompt))
+            SecurityLayer.log_interaction(user_query, "user")
+            return response.text
+        except Exception as e:
+            return f"❌ Error connecting to Gemini: {str(e)}"
 
 # MAIN APP
 def main():
@@ -101,12 +105,15 @@ def main():
 
     st.sidebar.title("Admin")
     
-    # Check if API Key is in secrets first, otherwise use the sidebar input
+    # Check if API Key is in secrets first
+    api_key = None
     if "GOOGLE_API_KEY" in st.secrets:
         api_key = st.secrets["GOOGLE_API_KEY"]
-        st.sidebar.success("API Key loaded from Secrets!")
+        st.sidebar.success("✅ API Key active from Secrets")
     else:
-        api_key = st.sidebar.text_input("Gemini API Key", type="password")
+        api_key = st.sidebar.text_input("Enter Gemini API Key", type="password")
+        if not api_key:
+            st.warning("Please add your API Key to Streamlit Secrets or enter it here.")
 
     uploaded_file = st.sidebar.file_uploader("Upload PDF", type="pdf")
 
@@ -124,7 +131,7 @@ def main():
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
 
-        if prompt := st.chat_input("Ask..."):
+        if prompt := st.chat_input("Ask Aris..."):
             st.session_state.messages.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
                 st.markdown(prompt)
@@ -142,3 +149,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
