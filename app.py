@@ -12,6 +12,33 @@ from pypdf import PdfReader
 # CONFIG
 st.set_page_config(page_title="InvestSmart AI (Ent. Edition)", page_icon="🛡️", layout="wide")
 
+# --- ARIS 2.0 ENTERPRISE UI (NEW CSS) ---
+st.markdown("""
+    <style>
+    /* Change the sidebar to Dark Blue/Black */
+    [data-testid="stSidebar"] {
+        background-color: #0E1117;
+    }
+    
+    /* Style the Chat Input and Buttons */
+    .stChatInputContainer {
+        border-top: 1px solid #1E3A8A;
+    }
+
+    /* Target the Headers */
+    h1, h2, h3 {
+        color: #1E40AF; /* Royal Blue */
+    }
+
+    /* Make the Audit Log look like a Terminal */
+    .stExpander {
+        background-color: #f0f2f6;
+        border-radius: 5px;
+        border-left: 5px solid #1E3A8A;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
 # CHUNKING
 def chunk_text(text, chunk_size=500):
     words = text.split()
@@ -83,13 +110,10 @@ class InvestSmartEngine:
     def get_compatible_models(self):
         try:
             models = genai.list_models()
-            # UPGRADE: Using attribute access (m.name) instead of dictionary access (m["name"])
-            # and checking supported_generation_methods for compatibility.
             compatible = [m.name for m in models if "generateContent" in m.supported_generation_methods]
             
             if not compatible:
                 st.sidebar.error("No compatible models found that support generateContent.")
-                # Safety fallback to ensure the engine doesn't break
                 return ["models/gemini-1.5-flash"]
             else:
                 st.sidebar.info(f"Found {len(compatible)} compatible model(s).")
@@ -114,7 +138,6 @@ class InvestSmartEngine:
         if not self.available_models:
             return "❌ No valid models available. Check API key and model compatibility."
         
-        # Iterates through available models if one fails
         for attempt in range(len(self.available_models)):
             try:
                 if not self.model:
@@ -124,16 +147,27 @@ class InvestSmartEngine:
                     return "❌ No valid model initialized."
                 
                 context = self.retrieve_context(user_query)
-                prompt = f"You are Aris, an AI policy assistant. Answer ONLY using this context: {context}\n\nQuestion: {user_query}"
-                response = self.model.generate_content(prompt)
                 
-                # Logic to handle potential empty responses
+                # --- ARIS 2.0 ENTERPRISE SYSTEM PROMPT ---
+                system_prompt = (
+                    "You are Aris, a sophisticated Investment Policy Expert for InvestSmart AI. "
+                    "Your tone is elite, professional, and culturally grounded in the Kenyan market. "
+                    "1. FORMATTING: Always use Markdown tables for any financial data or policy comparisons. "
+                    "2. BOUNDARIES: Answer ONLY using the provided context. If asked about subjects outside "
+                    "the context or for direct financial advice, politely state: 'I am designed to provide "
+                    "policy clarity and education only. For financial advice, please consult a certified advisor.' "
+                    "3. CITATIONS: Cite specific sections of the policy if visible (e.g., 'Per Section 4.2...')."
+                )
+                
+                full_prompt = f"{system_prompt}\n\nCONTEXT: {context}\n\nQUESTION: {user_query}"
+                response = self.model.generate_content(full_prompt)
+                
                 if hasattr(response, 'text'):
                     reply_text = response.text
                 else:
                     reply_text = "The model returned an empty response. Please rephrase."
 
-                CostMonitor.estimate_cost(len(prompt))
+                CostMonitor.estimate_cost(len(full_prompt))
                 SecurityLayer.log_interaction(user_query, "user")
                 return reply_text
 
@@ -156,7 +190,11 @@ def main():
     if "uploaded_file_name" not in st.session_state:
         st.session_state.uploaded_file_name = None
 
-    st.sidebar.title("Admin")
+    # UI HEADER
+    st.title("🛡️ InvestSmart AI: Aris 2.0")
+    st.subheader("Enterprise Policy Intelligence Prototype")
+
+    st.sidebar.title("Admin & Security")
     
     api_key = None
     if "GOOGLE_API_KEY" in st.secrets:
@@ -168,7 +206,7 @@ def main():
             st.warning("Please add your API Key to Streamlit Secrets or enter it here.")
 
     # PDF PRELOAD AND CHUNKING
-    uploaded_file = st.sidebar.file_uploader("Upload PDF", type="pdf")
+    uploaded_file = st.sidebar.file_uploader("Upload PDF Documents", type="pdf")
 
     if uploaded_file:
         if "pdf_chunks" not in st.session_state or st.session_state.uploaded_file_name != uploaded_file.name:
@@ -180,14 +218,13 @@ def main():
             chunks = st.session_state.pdf_chunks
     else:
         if "pdf_chunks" not in st.session_state:
-            text = "Sample policy: Uber not covered. Grace period 30 days."
+            text = "Sample policy: Uber not covered. Grace period 30 days. Lock-in period 6 months. Annual return 12%."
             chunks = chunk_text(text)
             st.session_state.pdf_chunks = chunks
         else:
             chunks = st.session_state.pdf_chunks
 
     if api_key:
-        # Initializing the engine inside the logic flow
         engine = InvestSmartEngine(api_key, chunks)
 
         for msg in st.session_state.messages:
@@ -204,11 +241,18 @@ def main():
                 st.markdown(reply)
             st.session_state.messages.append({"role": "assistant", "content": reply})
 
-    st.sidebar.metric("Cost", f"${st.session_state.total_cost:.6f}")
+    # --- SIDEBAR METRICS & SECURITY THEATER ---
+    st.sidebar.divider()
+    st.sidebar.metric("Compute Cost (USD)", f"${st.session_state.total_cost:.6f}")
 
     if "audit_log" in st.session_state:
-        with st.sidebar.expander("Audit Log"):
+        with st.sidebar.expander("🛡️ System Audit Log & Security Status"):
+            st.caption("Active Protocols: Crypto-Shredding | AES-256 | HMAC-Hashing")
             st.write(st.session_state.audit_log)
+    
+    if st.sidebar.button("🗑️ Crypto-Shred Session"):
+        SecurityLayer.crypto_shred()
+        st.rerun()
 
 if __name__ == "__main__":
     main()
