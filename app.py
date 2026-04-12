@@ -91,7 +91,7 @@ def extract_text_from_pdf(uploaded_file):
             text += content + "\n"
     return text
 
-# ENGINE WITH DYNAMIC MODEL SEARCH (RE-ENABLED FOR STABILITY)
+# ENGINE WITH ORIGINAL DYNAMIC MODEL SEARCH
 class InvestSmartEngine:
     def __init__(self, api_key, pdf_chunks):
         genai.configure(api_key=api_key)
@@ -135,9 +135,11 @@ class InvestSmartEngine:
                 
                 context = self.retrieve_context(user_query)
                 
+                # ARIS 2.0 ENTERPRISE SYSTEM PROMPT
                 system_prompt = (
-                    "You are Aris, an elite Investment Policy Expert. Tone: Professional, culturally nuanced (Kenyan). "
-                    "1. Use Markdown tables for comparisons. 2. Answer ONLY using context. 3. Cite policies."
+                    "You are Aris, an elite Investment Policy Expert for InvestSmart AI. Tone: Professional, "
+                    "culturally nuanced for Kenya. 1. Use Markdown tables for comparisons. 2. Answer ONLY using "
+                    "provided context. 3. Cite policies if visible. For financial advice, suggest a certified advisor."
                 )
                 
                 full_prompt = f"{system_prompt}\n\nCONTEXT: {context}\n\nQUESTION: {user_query}"
@@ -153,10 +155,11 @@ class InvestSmartEngine:
                 return reply_text
 
             except Exception as e:
+                # Log the error but continue to fallback
                 self.model_index = (self.model_index + 1) % len(self.available_models)
                 self.model = self.init_model(self.model_index)
 
-        return "❌ Connection timeout. Please check your network or API key."
+        return "❌ All models failed. Please check your API key and connection."
 
 # MAIN APP
 def main():
