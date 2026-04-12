@@ -12,7 +12,7 @@ from pypdf import PdfReader
 # CONFIG
 st.set_page_config(page_title="InvestSmart AI (Ent. Edition)", page_icon="🛡️", layout="wide")
 
-# --- ARIS 2.0 ENTERPRISE UI (NEW CSS) ---
+# --- ARIS 2.0 ENTERPRISE UI ---
 st.markdown("""
     <style>
     /* Change the sidebar to Dark Blue/Black */
@@ -98,34 +98,28 @@ def extract_text_from_pdf(uploaded_file):
             text += content + "\n"
     return text
 
-# ENGINE WITH AUTO MODEL FALLBACK
+# ENGINE WITH ELITE MODEL STACK (Sam's Strategy)
 class InvestSmartEngine:
     def __init__(self, api_key, pdf_chunks):
         genai.configure(api_key=api_key)
         self.pdf_chunks = pdf_chunks
-        self.available_models = self.get_compatible_models()
+        # UPDATED: We are explicitly defining the "Elite 3" stack for stability & speed
+        self.available_models = [
+            "models/gemini-1.5-flash", # Primary (Optimized for RAG speed)
+            "models/gemini-3-flash",   # Next-Gen (Intelligence & Reasoning)
+            "models/gemini-1.5-pro"    # Backup (Complex Policy Logic)
+        ]
         self.model_index = 0
         self.model = self.init_model(self.model_index)
 
-    def get_compatible_models(self):
-        try:
-            models = genai.list_models()
-            compatible = [m.name for m in models if "generateContent" in m.supported_generation_methods]
-            
-            if not compatible:
-                st.sidebar.error("No compatible models found that support generateContent.")
-                return ["models/gemini-1.5-flash"]
-            else:
-                st.sidebar.info(f"Found {len(compatible)} compatible model(s).")
-            return compatible
-        except Exception as e:
-            st.sidebar.error(f"Error fetching models: {e}")
-            return ["models/gemini-1.5-flash"]
-
     def init_model(self, index):
-        if self.available_models and 0 <= index < len(self.available_models):
-            st.sidebar.info(f"✅ Using model: {self.available_models[index]}")
-            return genai.GenerativeModel(model_name=self.available_models[index])
+        try:
+            if self.available_models and 0 <= index < len(self.available_models):
+                model_name = self.available_models[index]
+                st.sidebar.info(f"✅ Active Engine: {model_name}")
+                return genai.GenerativeModel(model_name=model_name)
+        except Exception as e:
+            st.sidebar.error(f"Error initializing {self.available_models[index]}: {e}")
         return None
 
     def retrieve_context(self, query):
@@ -135,20 +129,17 @@ class InvestSmartEngine:
         return self.pdf_chunks[0] if self.pdf_chunks else "No context available."
 
     def generate_response(self, user_query):
-        if not self.available_models:
-            return "❌ No valid models available. Check API key and model compatibility."
-        
         for attempt in range(len(self.available_models)):
             try:
                 if not self.model:
                     self.model = self.init_model(self.model_index)
                 
                 if not self.model:
-                    return "❌ No valid model initialized."
+                    continue
                 
                 context = self.retrieve_context(user_query)
                 
-                # --- ARIS 2.0 ENTERPRISE SYSTEM PROMPT ---
+                # ARIS 2.0 ENTERPRISE SYSTEM PROMPT
                 system_prompt = (
                     "You are Aris, a sophisticated Investment Policy Expert for InvestSmart AI. "
                     "Your tone is elite, professional, and culturally grounded in the Kenyan market. "
@@ -172,14 +163,11 @@ class InvestSmartEngine:
                 return reply_text
 
             except Exception as e:
-                st.sidebar.warning(f"Model {self.available_models[self.model_index]} failed: {e}")
-                self.model_index += 1
-                if self.model_index < len(self.available_models):
-                    self.model = self.init_model(self.model_index)
-                else:
-                    self.model = None
+                st.sidebar.warning(f"Engine shift: {self.available_models[self.model_index]} busy. Moving to fallback.")
+                self.model_index = (self.model_index + 1) % len(self.available_models)
+                self.model = self.init_model(self.model_index)
 
-        return "❌ All models failed. Please check your API key or try again later."
+        return "❌ All inference engines currently busy. Please retry in a moment."
 
 # MAIN APP
 def main():
@@ -241,7 +229,7 @@ def main():
                 st.markdown(reply)
             st.session_state.messages.append({"role": "assistant", "content": reply})
 
-    # --- SIDEBAR METRICS & SECURITY THEATER ---
+    # SIDEBAR METRICS & SECURITY THEATER
     st.sidebar.divider()
     st.sidebar.metric("Compute Cost (USD)", f"${st.session_state.total_cost:.6f}")
 
