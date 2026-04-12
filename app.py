@@ -15,22 +15,15 @@ st.set_page_config(page_title="InvestSmart AI (Ent. Edition)", page_icon="🛡�
 # --- ARIS 2.0 ENTERPRISE UI ---
 st.markdown("""
     <style>
-    /* Change the sidebar to Dark Blue/Black */
     [data-testid="stSidebar"] {
         background-color: #0E1117;
     }
-    
-    /* Style the Chat Input and Buttons */
     .stChatInputContainer {
         border-top: 1px solid #1E3A8A;
     }
-
-    /* Target the Headers */
     h1, h2, h3 {
-        color: #1E40AF; /* Royal Blue */
+        color: #1E40AF;
     }
-
-    /* Make the Audit Log look like a Terminal */
     .stExpander {
         background-color: #f0f2f6;
         border-radius: 5px;
@@ -98,28 +91,34 @@ def extract_text_from_pdf(uploaded_file):
             text += content + "\n"
     return text
 
-# ENGINE WITH ELITE MODEL STACK (Sam's Strategy)
+# ENGINE WITH DYNAMIC MODEL SEARCH (RE-ENABLED FOR STABILITY)
 class InvestSmartEngine:
     def __init__(self, api_key, pdf_chunks):
         genai.configure(api_key=api_key)
         self.pdf_chunks = pdf_chunks
-        # UPDATED: We are explicitly defining the "Elite 3" stack for stability & speed
-        self.available_models = [
-            "models/gemini-1.5-flash", # Primary (Optimized for RAG speed)
-            "models/gemini-3-flash",   # Next-Gen (Intelligence & Reasoning)
-            "models/gemini-1.5-pro"    # Backup (Complex Policy Logic)
-        ]
+        self.available_models = self.get_compatible_models()
         self.model_index = 0
         self.model = self.init_model(self.model_index)
 
-    def init_model(self, index):
+    def get_compatible_models(self):
         try:
-            if self.available_models and 0 <= index < len(self.available_models):
+            models = genai.list_models()
+            compatible = [m.name for m in models if "generateContent" in m.supported_generation_methods]
+            if not compatible:
+                return ["models/gemini-1.5-flash"]
+            return compatible
+        except Exception as e:
+            st.sidebar.error(f"Error fetching models: {e}")
+            return ["models/gemini-1.5-flash"]
+
+    def init_model(self, index):
+        if self.available_models and 0 <= index < len(self.available_models):
+            try:
                 model_name = self.available_models[index]
                 st.sidebar.info(f"✅ Active Engine: {model_name}")
                 return genai.GenerativeModel(model_name=model_name)
-        except Exception as e:
-            st.sidebar.error(f"Error initializing {self.available_models[index]}: {e}")
+            except:
+                return None
         return None
 
     def retrieve_context(self, query):
@@ -134,20 +133,11 @@ class InvestSmartEngine:
                 if not self.model:
                     self.model = self.init_model(self.model_index)
                 
-                if not self.model:
-                    continue
-                
                 context = self.retrieve_context(user_query)
                 
-                # ARIS 2.0 ENTERPRISE SYSTEM PROMPT
                 system_prompt = (
-                    "You are Aris, a sophisticated Investment Policy Expert for InvestSmart AI. "
-                    "Your tone is elite, professional, and culturally grounded in the Kenyan market. "
-                    "1. FORMATTING: Always use Markdown tables for any financial data or policy comparisons. "
-                    "2. BOUNDARIES: Answer ONLY using the provided context. If asked about subjects outside "
-                    "the context or for direct financial advice, politely state: 'I am designed to provide "
-                    "policy clarity and education only. For financial advice, please consult a certified advisor.' "
-                    "3. CITATIONS: Cite specific sections of the policy if visible (e.g., 'Per Section 4.2...')."
+                    "You are Aris, an elite Investment Policy Expert. Tone: Professional, culturally nuanced (Kenyan). "
+                    "1. Use Markdown tables for comparisons. 2. Answer ONLY using context. 3. Cite policies."
                 )
                 
                 full_prompt = f"{system_prompt}\n\nCONTEXT: {context}\n\nQUESTION: {user_query}"
@@ -163,11 +153,10 @@ class InvestSmartEngine:
                 return reply_text
 
             except Exception as e:
-                st.sidebar.warning(f"Engine shift: {self.available_models[self.model_index]} busy. Moving to fallback.")
                 self.model_index = (self.model_index + 1) % len(self.available_models)
                 self.model = self.init_model(self.model_index)
 
-        return "❌ All inference engines currently busy. Please retry in a moment."
+        return "❌ Connection timeout. Please check your network or API key."
 
 # MAIN APP
 def main():
@@ -178,7 +167,6 @@ def main():
     if "uploaded_file_name" not in st.session_state:
         st.session_state.uploaded_file_name = None
 
-    # UI HEADER
     st.title("🛡️ InvestSmart AI: Aris 2.0")
     st.subheader("Enterprise Policy Intelligence Prototype")
 
@@ -190,10 +178,7 @@ def main():
         st.sidebar.success("✅ API Key active from Secrets")
     else:
         api_key = st.sidebar.text_input("Enter Gemini API Key", type="password")
-        if not api_key:
-            st.warning("Please add your API Key to Streamlit Secrets or enter it here.")
 
-    # PDF PRELOAD AND CHUNKING
     uploaded_file = st.sidebar.file_uploader("Upload PDF Documents", type="pdf")
 
     if uploaded_file:
@@ -206,7 +191,7 @@ def main():
             chunks = st.session_state.pdf_chunks
     else:
         if "pdf_chunks" not in st.session_state:
-            text = "Sample policy: Uber not covered. Grace period 30 days. Lock-in period 6 months. Annual return 12%."
+            text = "Sample policy: 12% annual return. 6-month lock-in period."
             chunks = chunk_text(text)
             st.session_state.pdf_chunks = chunks
         else:
@@ -229,13 +214,12 @@ def main():
                 st.markdown(reply)
             st.session_state.messages.append({"role": "assistant", "content": reply})
 
-    # SIDEBAR METRICS & SECURITY THEATER
     st.sidebar.divider()
     st.sidebar.metric("Compute Cost (USD)", f"${st.session_state.total_cost:.6f}")
 
     if "audit_log" in st.session_state:
-        with st.sidebar.expander("🛡️ System Audit Log & Security Status"):
-            st.caption("Active Protocols: Crypto-Shredding | AES-256 | HMAC-Hashing")
+        with st.sidebar.expander("🛡️ System Audit Log"):
+            st.caption("Active Protocols: Crypto-Shredding | AES-256")
             st.write(st.session_state.audit_log)
     
     if st.sidebar.button("🗑️ Crypto-Shred Session"):
